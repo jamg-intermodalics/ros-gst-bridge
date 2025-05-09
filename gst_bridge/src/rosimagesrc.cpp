@@ -497,7 +497,7 @@ static GstFlowReturn rosimagesrc_create(
   } else {
     { //scope the mutex lock
       std::unique_lock<std::mutex> lck(src->msg_queue_mtx);
-      src->msg_queue.clear();   // XXX we can stop dropping the first message during preroll now
+      src->msg_queue.pop_front();   // XXX we can stop dropping the first message during preroll now
     }
   }
 
@@ -567,10 +567,22 @@ static void rosimagesrc_sub_cb(Rosimagesrc * src, sensor_msgs::msg::Image::Const
   }
 
   std::unique_lock<std::mutex> lck(src->msg_queue_mtx);
-  src->msg_queue.push_front(msg);
+  src->msg_queue.push_back(msg);
   while (src->msg_queue.size() > src->msg_queue_max) {
     src->msg_queue.pop_front();
-    RCLCPP_WARN(ros_base_src->node_if->logging->get_logger(), "dropping message");
+    // check if this is a latency/resource issue or just pipeline not running
+    GstState state;
+    GstState pending;
+    if (gst_element_get_state(GST_ELEMENT(src), &state, &pending, 0) == GST_STATE_CHANGE_SUCCESS && state == GST_STATE_PLAYING) {
+      RCLCPP_WARN_THROTTLE(
+        ros_base_src->node_if->logging->get_logger(), *ros_base_src->node_if->clock->get_clock(),
+        /*ms*/ 5000,
+        "Dropping older messages while element is in PLAYING state. This might be expected while the rest of the pipeline gets into PLAYING mode. "
+        "Otherwise, the pipeline is not running fast enough");
+      } else {
+        RCLCPP_WARN_ONCE(ros_base_src->node_if->logging->get_logger(), "Callback is receving messages but dropping older ones, since plugin not in PLAYING state");
+    }
+
   }
   src->msg_queue_cv.notify_one();
 }
@@ -580,6 +592,12 @@ static sensor_msgs::msg::Image::ConstSharedPtr rosimagesrc_wait_for_msg(Rosimage
   //RosBaseSrc *ros_base_src = GST_ROS_BASE_SRC (src);
 
   std::unique_lock<std::mutex> lck(src->msg_queue_mtx);
+  if (!src->msg_queue.empty())
+  {
+    // we have a message, no need to wait
+    auto msg = src->msg_queue.front();
+    return msg;
+  }
   src->msg_queue_cv.wait(lck);
   if (src->msg_queue.empty())
   {

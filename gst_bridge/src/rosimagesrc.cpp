@@ -31,6 +31,7 @@
  */
 
 #include <gst_bridge/rosimagesrc.h>
+#include <gst/zed/gstzedmeta.h>
 
 GST_DEBUG_CATEGORY_STATIC(rosimagesrc_debug_category);
 #define GST_CAT_DEFAULT rosimagesrc_debug_category
@@ -524,11 +525,24 @@ static GstFlowReturn rosimagesrc_create(
   info.size = length;
   memcpy(info.data, msg->data.data(), length);
   gst_buffer_unmap(*buf, &info);
+  auto zed_info = ZedInfo();
+  auto zed_pose = ZedPose();
+  auto zed_sensors = ZedSensors();
+  gst_buffer_add_zed_src_meta(
+           *buf,
+           zed_info,
+           zed_pose,
+           zed_sensors,
+            /* od_enabled: */ false,
+            /* obj_count:   */ 0,
+            /* objects:     */ nullptr,
+            /* timestamp:   */ rclcpp::Time(msg->header.stamp).nanoseconds(),
+           /* frame_id ~ ROS1 header/seq. Here assigning the same as ts   */ rclcpp::Time(msg->header.stamp).nanoseconds()
+         );
 
   base_time = gst_element_get_base_time(GST_ELEMENT(src));
   GST_BUFFER_PTS(*buf) =
     rclcpp::Time(msg->header.stamp).nanoseconds() - ros_base_src->ros_clock_offset - base_time;
-
   return ret;
 }
 

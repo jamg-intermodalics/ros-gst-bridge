@@ -51,6 +51,12 @@ find_package(audio_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 
+find_file(ZEDMETA_LIBRARY  libgstzedmeta.so ## hack
+  HINTS /usr/lib/aarch64-linux-gnu/
+)
+find_path (ZEDMETA_INCLUDE_DIR  gstzedmeta.h ## hack
+  HINTS /usr/include/gstreamer-1.0/gst/zed
+)
 
 ###########
 ## Build ##
@@ -110,6 +116,7 @@ target_include_directories(rosgstbridge PRIVATE
   $<INSTALL_INTERFACE:include>
   ${GLIB_INCLUDE_DIRS}
   ${GOBJECT_INCLUDE_DIR}
+  ${ZEDMETA_INCLUDE_DIR}
 )
 
 target_link_libraries(rosgstbridge PUBLIC
@@ -120,6 +127,7 @@ target_link_libraries(rosgstbridge PUBLIC
   ${GLIB_LIBRARIES}
   ${GLIB_GIO_LIBRARIES}
   ${GLIB_GOBJECT_LIBRARIES}
+  ${ZEDMETA_LIBRARY}
   PkgConfig::gstreamer
   PkgConfig::gstreamer-app
   PkgConfig::gstreamer-audio
@@ -161,4 +169,3 @@ ament_export_dependencies(
 ament_package(
   CONFIG_EXTRAS
 )
-

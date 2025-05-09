@@ -196,6 +196,9 @@ void rosimagesrc_set_property(
         g_free(src->init_caps);
         src->init_caps = g_value_dup_string(value);
         rosimagesrc_set_msg_props_from_caps_string(src, src->init_caps);
+        // set msg_init to false so we don't set the properties again
+        src->msg_init = false;
+
       } else {
         RCLCPP_ERROR(
           ros_base_src->node_if->logging->get_logger(), "can't change initial caps after init");
@@ -414,8 +417,13 @@ static GstCaps * rosimagesrc_getcaps(GstBaseSrc * base_src, GstCaps * filter)
     }
     GST_DEBUG_OBJECT(src, "getcaps with node ready, waiting for message");
     RCLCPP_INFO(ros_base_src->node_if->logging->get_logger(), "waiting for first message");
-    msg =
-      rosimagesrc_wait_for_msg(src);  // XXX need to fix API, the action happens in a side-effect
+
+    // Once we receive the first message, the cb will set the properties.
+    // So either that is already done, and we can go ahead and set the caps or we wait for the a msg, ie for the cb to be called
+    if (src->msg_init) {
+      msg =
+        rosimagesrc_wait_for_msg(src);  // XXX need to fix API, the action happens in a side-effect
+    }
 
     // if(src->msg_init)
     // {

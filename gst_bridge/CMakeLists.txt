@@ -58,6 +58,16 @@ find_path (ZEDMETA_INCLUDE_DIR  gstzedmeta.h ## hack
   HINTS /usr/include/gstreamer-1.0/gst/zed
 )
 
+# if ZEDMETA_LIBRARY is not found, error out
+if(NOT ZEDMETA_LIBRARY OR NOT ZEDMETA_INCLUDE_DIR)
+  message(FATAL_ERROR "ZEDMETA_LIBRARY not found. Please install the ZED SDK.")
+endif()
+
+# if ZEDMETA_INCLUDE_DIR is not found, error out
+if(NOT ZEDMETA_INCLUDE_DIR)
+  message(FATAL_ERROR "ZEDMETA_INCLUDE_DIR not found. Please install the ZED SDK.")
+endif()
+
 ###########
 ## Build ##
 ###########

@@ -196,9 +196,7 @@ void rosimagesrc_set_property(
         g_free(src->init_caps);
         src->init_caps = g_value_dup_string(value);
         rosimagesrc_set_msg_props_from_caps_string(src, src->init_caps);
-        // set msg_init to false so we don't set the properties again
-        src->msg_init = false;
-
+        // Note: rosimagesrc_set_msg_props_from_caps_string -> rosimagesrc_set_msg_props  sets msg_init to false so we don't set the properties again
       } else {
         RCLCPP_ERROR(
           ros_base_src->node_if->logging->get_logger(), "can't change initial caps after init");
@@ -423,6 +421,10 @@ static GstCaps * rosimagesrc_getcaps(GstBaseSrc * base_src, GstCaps * filter)
     if (src->msg_init) {
       msg =
         rosimagesrc_wait_for_msg(src);  // XXX need to fix API, the action happens in a side-effect
+      if (!msg) {
+        GST_DEBUG_OBJECT(src, "no message to set properties from");
+        return gst_pad_get_pad_template_caps(GST_BASE_SRC(src)->srcpad);
+      }
     }
 
     // if(src->msg_init)
@@ -533,6 +535,8 @@ static GstFlowReturn rosimagesrc_create(
   info.size = length;
   memcpy(info.data, msg->data.data(), length);
   gst_buffer_unmap(*buf, &info);
+
+  // Add metadata to the buffer. Use the Zed metadata structure as general purpose structure for image metadata
   auto zed_info = ZedInfo();
   auto zed_pose = ZedPose();
   auto zed_sensors = ZedSensors();
@@ -545,7 +549,7 @@ static GstFlowReturn rosimagesrc_create(
             /* obj_count:   */ 0,
             /* objects:     */ nullptr,
             /* timestamp:   */ rclcpp::Time(msg->header.stamp).nanoseconds(),
-           /* frame_id ~ ROS1 header/seq. Here assigning the same as ts   */ rclcpp::Time(msg->header.stamp).nanoseconds()
+           /* frame_id ~ ROS1 header/seq. Here assigning the same as ts */ rclcpp::Time(msg->header.stamp).nanoseconds()
          );
 
   base_time = gst_element_get_base_time(GST_ELEMENT(src));

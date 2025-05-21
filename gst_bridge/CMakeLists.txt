@@ -51,6 +51,8 @@ find_package(audio_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 
+# find zed meta to be able to use that as metadata structure on rosimsgsrc
+# That is currently used as general metadata message for images.
 find_file(ZEDMETA_LIBRARY  libgstzedmeta.so ## hack
   HINTS /usr/lib/aarch64-linux-gnu/
 )
@@ -59,7 +61,7 @@ find_path (ZEDMETA_INCLUDE_DIR  gstzedmeta.h ## hack
 )
 
 # if ZEDMETA_LIBRARY is not found, error out
-if(NOT ZEDMETA_LIBRARY OR NOT ZEDMETA_INCLUDE_DIR)
+if(NOT ZEDMETA_LIBRARY)
   message(FATAL_ERROR "ZEDMETA_LIBRARY not found. Please install the ZED SDK.")
 endif()
 

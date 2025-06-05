@@ -31,6 +31,7 @@
  */
 
 #include <gst_bridge/rosimagesrc.h>
+#include <gst/zed/gstzedmeta.h>
 
 GST_DEBUG_CATEGORY_STATIC(rosimagesrc_debug_category);
 #define GST_CAT_DEFAULT rosimagesrc_debug_category
@@ -158,7 +159,7 @@ static void rosimagesrc_init(Rosimagesrc * src)
   src->init_caps = g_strdup("");
 
   src->msg_init = true;
-  src->msg_queue_max = 1;
+  src->msg_queue_max = 2; // allow 2 messages to be queued
   // XXX why does queue segfault without expicit construction?
   src->msg_queue = std::deque<sensor_msgs::msg::Image::ConstSharedPtr>();
 
@@ -195,6 +196,7 @@ void rosimagesrc_set_property(
         g_free(src->init_caps);
         src->init_caps = g_value_dup_string(value);
         rosimagesrc_set_msg_props_from_caps_string(src, src->init_caps);
+        // Note: rosimagesrc_set_msg_props_from_caps_string -> rosimagesrc_set_msg_props  sets msg_init to false so we don't set the properties again
       } else {
         RCLCPP_ERROR(
           ros_base_src->node_if->logging->get_logger(), "can't change initial caps after init");
@@ -413,8 +415,17 @@ static GstCaps * rosimagesrc_getcaps(GstBaseSrc * base_src, GstCaps * filter)
     }
     GST_DEBUG_OBJECT(src, "getcaps with node ready, waiting for message");
     RCLCPP_INFO(ros_base_src->node_if->logging->get_logger(), "waiting for first message");
-    msg =
-      rosimagesrc_wait_for_msg(src);  // XXX need to fix API, the action happens in a side-effect
+
+    // Once we receive the first message, the cb will set the properties.
+    // So either that is already done, and we can go ahead and set the caps or we wait for the a msg, ie for the cb to be called
+    if (src->msg_init) {
+      msg =
+        rosimagesrc_wait_for_msg(src);  // XXX need to fix API, the action happens in a side-effect
+      if (!msg) {
+        GST_DEBUG_OBJECT(src, "no message to set properties from");
+        return gst_pad_get_pad_template_caps(GST_BASE_SRC(src)->srcpad);
+      }
+    }
 
     // if(src->msg_init)
     // {
@@ -497,7 +508,7 @@ static GstFlowReturn rosimagesrc_create(
   } else {
     { //scope the mutex lock
       std::unique_lock<std::mutex> lck(src->msg_queue_mtx);
-      src->msg_queue.clear();   // XXX we can stop dropping the first message during preroll now
+      src->msg_queue.pop_front();   // XXX we can stop dropping the first message during preroll now
     }
   }
 
@@ -525,10 +536,25 @@ static GstFlowReturn rosimagesrc_create(
   memcpy(info.data, msg->data.data(), length);
   gst_buffer_unmap(*buf, &info);
 
+  // Add metadata to the buffer. Use the Zed metadata structure as general purpose structure for image metadata
+  auto zed_info = ZedInfo();
+  auto zed_pose = ZedPose();
+  auto zed_sensors = ZedSensors();
+  gst_buffer_add_zed_src_meta(
+           *buf,
+           zed_info,
+           zed_pose,
+           zed_sensors,
+            /* od_enabled: */ false,
+            /* obj_count:   */ 0,
+            /* objects:     */ nullptr,
+            /* timestamp:   */ rclcpp::Time(msg->header.stamp).nanoseconds(),
+           /* frame_id ~ ROS1 header/seq. Here assigning the same as ts */ rclcpp::Time(msg->header.stamp).nanoseconds()
+         );
+
   base_time = gst_element_get_base_time(GST_ELEMENT(src));
   GST_BUFFER_PTS(*buf) =
     rclcpp::Time(msg->header.stamp).nanoseconds() - ros_base_src->ros_clock_offset - base_time;
-
   return ret;
 }
 
@@ -567,10 +593,22 @@ static void rosimagesrc_sub_cb(Rosimagesrc * src, sensor_msgs::msg::Image::Const
   }
 
   std::unique_lock<std::mutex> lck(src->msg_queue_mtx);
-  src->msg_queue.push_front(msg);
+  src->msg_queue.push_back(msg);
   while (src->msg_queue.size() > src->msg_queue_max) {
     src->msg_queue.pop_front();
-    RCLCPP_WARN(ros_base_src->node_if->logging->get_logger(), "dropping message");
+    // check if this is a latency/resource issue or just pipeline not running
+    GstState state;
+    GstState pending;
+    if (gst_element_get_state(GST_ELEMENT(src), &state, &pending, 0) == GST_STATE_CHANGE_SUCCESS && state == GST_STATE_PLAYING) {
+      RCLCPP_WARN_THROTTLE(
+        ros_base_src->node_if->logging->get_logger(), *ros_base_src->node_if->clock->get_clock(),
+        /*ms*/ 5000,
+        "Dropping older messages while element is in PLAYING state. This might be expected while the rest of the pipeline gets into PLAYING mode. "
+        "Otherwise, the pipeline is not running fast enough");
+      } else {
+        RCLCPP_WARN_ONCE(ros_base_src->node_if->logging->get_logger(), "Callback is receving messages but dropping older ones, since plugin not in PLAYING state");
+    }
+
   }
   src->msg_queue_cv.notify_one();
 }
@@ -580,6 +618,12 @@ static sensor_msgs::msg::Image::ConstSharedPtr rosimagesrc_wait_for_msg(Rosimage
   //RosBaseSrc *ros_base_src = GST_ROS_BASE_SRC (src);
 
   std::unique_lock<std::mutex> lck(src->msg_queue_mtx);
+  if (!src->msg_queue.empty())
+  {
+    // we have a message, no need to wait
+    auto msg = src->msg_queue.front();
+    return msg;
+  }
   src->msg_queue_cv.wait(lck);
   if (src->msg_queue.empty())
   {

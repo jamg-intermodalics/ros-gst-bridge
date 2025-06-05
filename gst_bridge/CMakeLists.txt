@@ -51,6 +51,24 @@ find_package(audio_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 
+# find zed meta to be able to use that as metadata structure on rosimsgsrc
+# That is currently used as general metadata message for images.
+find_file(ZEDMETA_LIBRARY  libgstzedmeta.so ## hack
+  HINTS /usr/lib/aarch64-linux-gnu/
+)
+find_path (ZEDMETA_INCLUDE_DIR  gstzedmeta.h ## hack
+  HINTS /usr/include/gstreamer-1.0/gst/zed
+)
+
+# if ZEDMETA_LIBRARY is not found, error out
+if(NOT ZEDMETA_LIBRARY)
+  message(FATAL_ERROR "ZEDMETA_LIBRARY not found. Please install the ZED SDK.")
+endif()
+
+# if ZEDMETA_INCLUDE_DIR is not found, error out
+if(NOT ZEDMETA_INCLUDE_DIR)
+  message(FATAL_ERROR "ZEDMETA_INCLUDE_DIR not found. Please install the ZED SDK.")
+endif()
 
 ###########
 ## Build ##
@@ -110,6 +128,7 @@ target_include_directories(rosgstbridge PRIVATE
   $<INSTALL_INTERFACE:include>
   ${GLIB_INCLUDE_DIRS}
   ${GOBJECT_INCLUDE_DIR}
+  ${ZEDMETA_INCLUDE_DIR}
 )
 
 target_link_libraries(rosgstbridge PUBLIC
@@ -120,6 +139,7 @@ target_link_libraries(rosgstbridge PUBLIC
   ${GLIB_LIBRARIES}
   ${GLIB_GIO_LIBRARIES}
   ${GLIB_GOBJECT_LIBRARIES}
+  ${ZEDMETA_LIBRARY}
   PkgConfig::gstreamer
   PkgConfig::gstreamer-app
   PkgConfig::gstreamer-audio
@@ -161,4 +181,3 @@ ament_export_dependencies(
 ament_package(
   CONFIG_EXTRAS
 )
-

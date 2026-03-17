@@ -540,7 +540,7 @@ static GstFlowReturn rosimagesrc_create(
   auto zed_info = ZedInfo();
   auto zed_pose = ZedPose();
   auto zed_sensors = ZedSensors();
-  auto zed_cam_info = _ZedCamInfo();
+  auto zed_cam_info = ZedCamInfo();
 
   gst_buffer_add_zed_src_meta(
            *buf,

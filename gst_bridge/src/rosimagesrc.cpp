@@ -540,6 +540,8 @@ static GstFlowReturn rosimagesrc_create(
   auto zed_info = ZedInfo();
   auto zed_pose = ZedPose();
   auto zed_sensors = ZedSensors();
+  auto zed_cam_info = ZedCamInfo();
+
   gst_buffer_add_zed_src_meta(
            *buf,
            zed_info,
@@ -549,6 +551,7 @@ static GstFlowReturn rosimagesrc_create(
             /* obj_count:   */ 0,
             /* objects:     */ nullptr,
             /* timestamp:   */ rclcpp::Time(msg->header.stamp).nanoseconds(),
+            zed_cam_info,
            /* frame_id ~ ROS1 header/seq. Here assigning the same as ts */ rclcpp::Time(msg->header.stamp).nanoseconds()
          );
 

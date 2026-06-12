@@ -53,11 +53,16 @@ find_package(builtin_interfaces REQUIRED)
 
 # find zed meta to be able to use that as metadata structure on rosimsgsrc
 # That is currently used as general metadata message for images.
-find_file(ZEDMETA_LIBRARY  libgstzedmeta.so ## hack
-  HINTS /usr/lib/aarch64-linux-gnu/
+find_file(ZEDMETA_LIBRARY libgstzedmeta.so
+  HINTS
+    /usr/lib/aarch64-linux-gnu/
+    /usr/lib/x86_64-linux-gnu/
+    /usr/lib/
 )
-find_path (ZEDMETA_INCLUDE_DIR  gstzedmeta.h ## hack
-  HINTS /usr/include/gstreamer-1.0/gst/zed
+find_path(ZEDMETA_INCLUDE_DIR gstzedmeta.h
+  HINTS
+    /usr/include/gstreamer-1.0/gst/zed
+    /usr/include/gstreamer-1.0/
 )
 
 # if ZEDMETA_LIBRARY is not found, error out
